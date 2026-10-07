@@ -1,0 +1,17 @@
+{
+  "name": "bt-file-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "파일을 올리고 브라우저에서 바로 실행/열람할 수 있는 간단한 웹 서버",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
