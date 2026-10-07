@@ -266,8 +266,8 @@
     <span class="ko"><span class="silver">자기야, 생일 축하해</span> 💖</span>
   </h1>
   <div class="frame" id="frame">
-    <video id="video" playsinline controls preload="metadata">
-      <!-- 영상 파일을 public/video.mp4 로 넣으면 자동으로 재생됩니다 -->
+    <!-- preload=auto: the video buffers while the shooting-star intro plays, so it starts without a wait -->
+    <video id="video" playsinline webkit-playsinline controls preload="auto" poster="poster.jpg">
       <source src="video.mp4" type="video/mp4">
       <source src="files/video.mp4" type="video/mp4">
     </video>
