@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>파일 실행 서버</title>
+<meta property="og:title" content="파일 실행 서버">
+<meta property="og:description" content="파일을 올리고 링크로 바로 열어보세요">
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2129; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --danger:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111418; --card:#1b1f25; --text:#e8eaed; --muted:#9aa0a6; --line:#2d333b; --accent:#5b8def; --danger:#f87171; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  label.btn, button { display:inline-block; border:0; border-radius:8px; padding:10px 14px; font-size:15px; cursor:pointer; background:var(--accent); color:#fff; }
+  label.btn.secondary { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input[type=password] { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font-size:15px; margin-bottom:12px; }
+  input[type=file] { display:none; }
+  #status { margin-top:10px; font-size:14px; color:var(--muted); min-height:1em; word-break:break-all; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { display:flex; align-items:center; gap:8px; padding:10px 0; border-top:1px solid var(--line); }
+  li:first-child { border-top:0; }
+  li a.name { flex:1; color:var(--accent); text-decoration:none; word-break:break-all; }
+  li .size { color:var(--muted); font-size:12px; white-space:nowrap; }
+  li button { padding:6px 10px; font-size:13px; background:transparent; border:1px solid var(--line); color:var(--text); }
+  li button.del { color:var(--danger); }
+  .empty { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>파일 실행 서버</h1>
+  <p class="sub">파일을 올리면 링크가 생깁니다. HTML 파일은 링크를 누르면 바로 실행됩니다.</p>
+
+  <section class="card">
+    <h2>파일 올리기</h2>
+    <input type="password" id="pw" placeholder="업로드 비밀번호" hidden>
+    <div class="row">
+      <label class="btn">파일 선택<input type="file" id="files" multiple></label>
+      <label class="btn secondary">폴더 통째로<input type="file" id="folder" webkitdirectory multiple></label>
+    </div>
+    <div id="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>올린 파일</h2>
+    <ul id="list"><li class="empty">불러오는 중…</li></ul>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const pw = $("pw");
+let cfg = { passwordRequired: false, maxFileMb: 50 };
+try { pw.value = localStorage.getItem("uploadPassword") || ""; } catch (e) {}
+
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function fileUrl(p) { return "/files/" + p.split("/").map(encodeURIComponent).join("/"); }
+function headers() {
+  try { localStorage.setItem("uploadPassword", pw.value); } catch (e) {}
+  return { "x-upload-password": pw.value };
+}
+
+async function refresh() {
+  const files = await (await fetch("/api/files")).json();
+  const list = $("list");
+  list.innerHTML = "";
+  if (!files.length) { list.innerHTML = '<li class="empty">아직 올린 파일이 없습니다.</li>'; return; }
+  for (const f of files) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.className = "name"; a.href = fileUrl(f.path); a.target = "_blank"; a.textContent = f.path;
+    const size = document.createElement("span");
+    size.className = "size"; size.textContent = fmtSize(f.size);
+    const copy = document.createElement("button");
+    copy.textContent = "링크 복사";
+    copy.onclick = async () => {
+      const url = location.origin + fileUrl(f.path);
+      try { await navigator.clipboard.writeText(url); copy.textContent = "복사됨"; }
+      catch (e) { prompt("링크를 복사하세요", url); }
+      setTimeout(() => (copy.textContent = "링크 복사"), 1500);
+    };
+    const del = document.createElement("button");
+    del.className = "del"; del.textContent = "삭제";
+    del.onclick = async () => {
+      if (!confirm(f.path + " 를 삭제할까요?")) return;
+      const r = await fetch("/api/files?path=" + encodeURIComponent(f.path), { method: "DELETE", headers: headers() });
+      if (!r.ok) alert((await r.json()).error);
+      refresh();
+    };
+    li.append(a, size, copy, del);
+    list.append(li);
+  }
+}
+
+async function send(fileList) {
+  if (!fileList.length) return;
+  const fd = new FormData();
+  for (const f of fileList) fd.append("files", f, f.webkitRelativePath || f.name);
+  $("status").textContent = fileList.length + "개 업로드 중…";
+  try {
+    const r = await fetch("/api/upload", { method: "POST", headers: headers(), body: fd });
+    const data = await r.json();
+    $("status").textContent = r.ok ? "완료: " + data.uploaded.join(", ") : "실패: " + data.error;
+  } catch (e) {
+    $("status").textContent = "실패: " + e.message;
+  }
+  refresh();
+}
+
+$("files").onchange = (e) => { send([...e.target.files]); e.target.value = ""; };
+$("folder").onchange = (e) => { send([...e.target.files]); e.target.value = ""; };
+
+fetch("/api/config").then((r) => r.json()).then((c) => { cfg = c; pw.hidden = !c.passwordRequired; });
+refresh();
+</script>
+</body>
+</html>
